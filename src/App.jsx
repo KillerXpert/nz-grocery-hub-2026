@@ -1,90 +1,106 @@
 import React, { useState, useEffect, useRef } from 'react';
 
-// Unified Brand Configuration mimicking real-world NZ logos
+// Unified Brand Configuration for NZ Stores
 const STORE_BRANDS = {
   ALL: {
     name: 'ALL',
     bg: '#27272a',
     text: '#a3e635',
     border: 'rgba(163, 230, 53, 0.4)',
-    icon: (
-      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-        <rect width="7" height="7" x="3" y="3" rx="1" /><rect width="7" height="7" x="14" y="3" rx="1" /><rect width="7" height="7" x="14" y="14" rx="1" /><rect width="7" height="7" x="3" y="14" rx="1" />
-      </svg>
-    ),
+    icon: '❖',
   },
   PAKnSAVE: {
     name: 'PAKnSAVE',
     bg: '#FACC15',
     text: '#000000',
     border: '#EAB308',
-    icon: (
-      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-        <circle cx="9" cy="21" r="1" /><circle cx="20" cy="21" r="1" />
-        <path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6" />
-      </svg>
-    ),
+    icon: '🛒',
   },
   'New World': {
     name: 'New World',
     bg: '#DC2626',
     text: '#FFFFFF',
     border: '#B91C1C',
-    icon: (
-      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-        <path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4Z" /><path d="M3 6h18" /><path d="M16 10a4 4 0 0 1-8 0" />
-      </svg>
-    ),
+    icon: '🍎',
   },
   Woolworths: {
     name: 'Woolworths',
     bg: '#16A34A',
     text: '#FFFFFF',
     border: '#15803D',
-    icon: (
-      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-        <path d="M12 20a8 8 0 1 0 0-16 8 8 0 0 0 0 16Z" /><path d="M12 14a2 2 0 1 0 0-4 2 2 0 0 0 0 4Z" /><path d="M12 2v2" />
-      </svg>
-    ),
+    icon: '🍏',
   },
   Bunnings: {
     name: 'Bunnings',
     bg: '#047857',
     text: '#FFFFFF',
     border: '#065F46',
-    icon: (
-      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-        <path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" /><polyline points="9 22 9 12 15 12 15 22" />
-      </svg>
-    ),
+    icon: '🔨',
   },
   'Mitre 10': {
     name: 'Mitre 10',
     bg: '#F97316',
     text: '#000000',
     border: '#EA580C',
-    icon: (
-      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-        <path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z" />
-      </svg>
-    ),
+    icon: '🔧',
   },
   Other: {
     name: 'Other',
     bg: '#3F3F46',
     text: '#FFFFFF',
     border: '#52525B',
-    icon: (
-      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-        <circle cx="12" cy="12" r="10" /><path d="m10 15 5-3-5-3v6Z" />
-      </svg>
-    ),
+    icon: '📦',
+  },
+};
+
+// Built-in NZ Retail Catalog for immediate exact matches & sample NZ barcodes
+const NZ_PRODUCT_CATALOG = {
+  '9400547001234': {
+    name: "Pam's Pure Butter 500g",
+    price: 6.49,
+    store: 'PAKnSAVE',
+    description: "Chilled Dairy • PAK'nSAVE",
+  },
+  '9400547009872': {
+    name: "Pam's Whole Milk 2L",
+    price: 4.89,
+    store: 'PAKnSAVE',
+    description: 'Chilled Dairy • Pams Brand',
+  },
+  '9300675045797': {
+    name: 'Woolworths Full Cream Milk 2L',
+    price: 4.75,
+    store: 'Woolworths',
+    description: 'Everyday Chilled Dairy',
+  },
+  '9400562002345': {
+    name: "Wattie's Baked Beans 420g",
+    price: 2.29,
+    store: 'Woolworths',
+    description: 'Canned Goods - Aisle 4',
+  },
+  '9414574001018': {
+    name: 'Sanitarium Marmite 250g',
+    price: 5.60,
+    store: 'New World',
+    description: 'Pantry Spread',
+  },
+  '0000000001001': {
+    name: 'Solagard Roof Paint 10L',
+    price: 189.00,
+    store: 'Bunnings',
+    description: 'Paint & Decorating',
+  },
+  '0000000001002': {
+    name: 'Paint Shield Mitre 10 & Tape',
+    price: 18.50,
+    store: 'Mitre 10',
+    description: 'DIY Hardware • Aisle 8',
   },
 };
 
 function StoreBadge({ store }) {
   const brand = STORE_BRANDS[store] || STORE_BRANDS['Other'];
-
   return (
     <span
       style={{
@@ -99,10 +115,9 @@ function StoreBadge({ store }) {
         fontSize: '11px',
         fontWeight: 800,
         letterSpacing: '0.3px',
-        boxShadow: '0 2px 8px rgba(0,0,0,0.3)',
       }}
     >
-      {brand.icon}
+      <span>{brand.icon}</span>
       <span>{store}</span>
     </span>
   );
@@ -112,11 +127,12 @@ export default function App() {
   const [activeStore, setActiveStore] = useState('ALL');
   const [isScannerOpen, setIsScannerOpen] = useState(false);
   const [cameraError, setCameraError] = useState(null);
+  const [isLookingUp, setIsLookingUp] = useState(false);
 
   const videoRef = useRef(null);
   const streamRef = useRef(null);
 
-  // Form state for adding items
+  // Form state
   const [itemName, setItemName] = useState('');
   const [itemPrice, setItemPrice] = useState('');
   const [itemStore, setItemStore] = useState('PAKnSAVE');
@@ -130,7 +146,7 @@ export default function App() {
       quantity: 1,
       store: 'PAKnSAVE',
       isCompleted: false,
-      description: "Chilled Dairy • PAK'nSAVE Tauranga",
+      description: "Chilled Dairy • PAK'nSAVE",
       barcode: '9400547001234',
     },
     {
@@ -142,56 +158,23 @@ export default function App() {
       isCompleted: false,
       description: 'Aisle 8 • DIY House Renovation',
     },
-    {
-      id: '3',
-      name: 'Solagard Roof Paint 10L',
-      price: 189.00,
-      quantity: 1,
-      store: 'Bunnings',
-      isCompleted: false,
-      description: 'Paint & Decorating • Weekend Project',
-    },
-    {
-      id: '4',
-      name: 'Avocado Bag (5 pk)',
-      price: 4.99,
-      quantity: 1,
-      store: 'New World',
-      isCompleted: true,
-      description: 'Fresh Produce',
-    },
-    {
-      id: '5',
-      name: 'Watties Baked Beans 420g',
-      price: 2.29,
-      quantity: 2,
-      store: 'Woolworths',
-      isCompleted: false,
-      description: 'Canned Goods - Aisle 4',
-    },
   ]);
 
   const storeKeys = ['ALL', 'PAKnSAVE', 'New World', 'Woolworths', 'Bunnings', 'Mitre 10', 'Other'];
 
   const filteredItems =
-    activeStore === 'ALL'
-      ? items
-      : items.filter((item) => item.store === activeStore);
+    activeStore === 'ALL' ? items : items.filter((item) => item.store === activeStore);
 
   const runningTotal = filteredItems
     .filter((i) => !i.isCompleted)
     .reduce((sum, item) => sum + item.price * item.quantity, 0);
 
-  // Toggle Completed Checkbox
   const toggleComplete = (id) => {
     setItems((prev) =>
-      prev.map((item) =>
-        item.id === id ? { ...item, isCompleted: !item.isCompleted } : item
-      )
+      prev.map((item) => (item.id === id ? { ...item, isCompleted: !item.isCompleted } : item))
     );
   };
 
-  // Delete Item Function
   const deleteItem = (id, e) => {
     e.stopPropagation();
     setItems((prev) => prev.filter((item) => item.id !== id));
@@ -208,7 +191,7 @@ export default function App() {
       quantity: parseInt(itemQty, 10) || 1,
       store: itemStore,
       isCompleted: false,
-      description: 'Manually added to list',
+      description: 'Manually added',
     };
 
     setItems((prev) => [newItem, ...prev]);
@@ -217,44 +200,91 @@ export default function App() {
     setItemQty(1);
   };
 
-  // Handle successful scan from real camera or fallback
-  const handleBarcodeDetected = (barcodeValue) => {
-    const randomBarcodes = [
-      {
-        name: `Scanned Item (${barcodeValue.slice(-4)})`,
-        price: 5.89,
-        store: 'PAKnSAVE',
-        description: `Barcode: ${barcodeValue}`,
-      },
-      {
-        name: `Hardware Tool (${barcodeValue.slice(-4)})`,
-        price: 24.50,
-        store: 'Mitre 10',
-        description: `Barcode: ${barcodeValue}`,
-      },
-      {
-        name: `Supermarket Item (${barcodeValue.slice(-4)})`,
-        price: 8.99,
-        store: 'Woolworths',
-        description: `Barcode: ${barcodeValue}`,
-      },
-    ];
-    const picked = randomBarcodes[Math.floor(Math.random() * randomBarcodes.length)];
+  // REAL BARCODE LOOKUP FUNCTION
+  const handleBarcodeDetected = async (barcodeValue) => {
+    setIsLookingUp(true);
 
+    try {
+      // 1. Check NZ Local Exact Match Catalog First
+      if (NZ_PRODUCT_CATALOG[barcodeValue]) {
+        const localMatch = NZ_PRODUCT_CATALOG[barcodeValue];
+        addItemToList({
+          name: localMatch.name,
+          price: localMatch.price,
+          store: localMatch.store,
+          description: localMatch.description,
+          barcode: barcodeValue,
+        });
+        return;
+      }
+
+      // 2. Fetch Live Global Barcode Database (Open Food Facts API)
+      const response = await fetch(
+        `https://world.openfoodfacts.org/api/v2/product/${barcodeValue}.json`
+      );
+      const data = await response.json();
+
+      if (data && data.status === 1 && data.product) {
+        const prod = data.product;
+        const brand = prod.brands ? prod.brands.split(',')[0].trim() : '';
+        const title = prod.product_name || prod.product_name_en || 'Scanned Product';
+        const fullName = brand ? `${brand} ${title}` : title;
+
+        // Auto-guess NZ Supermarket based on brand name
+        let detectedStore = 'Woolworths';
+        const brandUpper = brand.toUpperCase();
+        if (brandUpper.includes('PAMS') || brandUpper.includes('VALUE')) {
+          detectedStore = 'PAKnSAVE';
+        } else if (brandUpper.includes('WOOLWORTHS') || brandUpper.includes('HOMEBRAND')) {
+          detectedStore = 'Woolworths';
+        }
+
+        addItemToList({
+          name: fullName,
+          price: 5.50, // Default estimate if store price isn't exposed by OpenFoodFacts
+          store: detectedStore,
+          description: `Scanned Barcode: ${barcodeValue} • ${prod.categories ? prod.categories.split(',')[0] : 'Grocery'}`,
+          barcode: barcodeValue,
+        });
+      } else {
+        // 3. Fallback for unlisted barcodes
+        addItemToList({
+          name: `Scanned Item (${barcodeValue})`,
+          price: 0.00,
+          store: 'PAKnSAVE',
+          description: `Barcode: ${barcodeValue} • Enter price manually`,
+          barcode: barcodeValue,
+        });
+      }
+    } catch (error) {
+      // Handle offline/network fallback
+      addItemToList({
+        name: `Scanned Product (${barcodeValue.slice(-4)})`,
+        price: 0.00,
+        store: 'Other',
+        description: `Barcode: ${barcodeValue}`,
+        barcode: barcodeValue,
+      });
+    } finally {
+      setIsLookingUp(false);
+      closeScanner();
+    }
+  };
+
+  const addItemToList = (productData) => {
     setItems((prev) => [
       {
         id: Date.now().toString(),
-        name: picked.name,
-        price: picked.price,
+        name: productData.name,
+        price: productData.price || 0,
         quantity: 1,
-        store: picked.store,
+        store: productData.store || 'Other',
         isCompleted: false,
-        description: picked.description,
-        barcode: barcodeValue,
+        description: productData.description,
+        barcode: productData.barcode,
       },
       ...prev,
     ]);
-    closeScanner();
   };
 
   const closeScanner = () => {
@@ -264,9 +294,9 @@ export default function App() {
     }
     setIsScannerOpen(false);
     setCameraError(null);
+    setIsLookingUp(false);
   };
 
-  // Real Camera & BarcodeDetector Effect
   useEffect(() => {
     let scanInterval = null;
 
@@ -274,34 +304,31 @@ export default function App() {
       const startCamera = async () => {
         try {
           const stream = await navigator.mediaDevices.getUserMedia({
-            video: { facingMode: 'environment' }, // Prefer phone rear camera
+            video: { facingMode: 'environment' },
           });
           streamRef.current = stream;
           if (videoRef.current) {
             videoRef.current.srcObject = stream;
           }
 
-          // Check if native BarcodeDetector API is supported on phone browser
           if ('BarcodeDetector' in window) {
             const detector = new window.BarcodeDetector({
               formats: ['ean_13', 'upc_a', 'qr_code', 'code_128', 'ean_8'],
             });
 
             scanInterval = setInterval(async () => {
-              if (videoRef.current && videoRef.current.readyState === 4) {
+              if (videoRef.current && videoRef.current.readyState === 4 && !isLookingUp) {
                 try {
                   const barcodes = await detector.detect(videoRef.current);
                   if (barcodes && barcodes.length > 0) {
                     handleBarcodeDetected(barcodes[0].rawValue);
                   }
-                } catch (err) {
-                  // Ignore harmless single-frame detection errors
-                }
+                } catch (err) {}
               }
-            }, 300);
+            }, 500);
           }
         } catch (err) {
-          setCameraError('Camera access denied or unavailable. You can use the button below to test.');
+          setCameraError('Camera access unavailable. Use the Simulate button to test NZ catalog.');
         }
       };
 
@@ -314,7 +341,7 @@ export default function App() {
         streamRef.current.getTracks().forEach((track) => track.stop());
       }
     };
-  }, [isScannerOpen]);
+  }, [isScannerOpen, isLookingUp]);
 
   return (
     <div
@@ -326,69 +353,30 @@ export default function App() {
         color: '#f4f4f5',
         fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
         padding: '24px 16px',
-        position: 'relative',
-        overflowX: 'hidden',
       }}
     >
-      <div
-        style={{
-          maxWidth: '780px',
-          margin: '0 auto',
-          position: 'relative',
-          zIndex: 10,
-          display: 'flex',
-          flexDirection: 'column',
-          gap: '20px',
-        }}
-      >
-        {/* Header Glass Panel */}
+      <div style={{ maxWidth: '780px', margin: '0 auto', display: 'flex', flexDirection: 'column', gap: '20px' }}>
+        {/* Header */}
         <div
           style={{
             background: 'rgba(20, 28, 22, 0.55)',
             backdropFilter: 'blur(20px)',
             border: '1px solid rgba(132, 204, 22, 0.3)',
-            boxShadow: '0 20px 40px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.1)',
             borderRadius: '20px',
             padding: '24px',
             display: 'flex',
-            flexWrap: 'wrap',
             justifyContent: 'space-between',
             alignItems: 'center',
+            flexWrap: 'wrap',
             gap: '16px',
           }}
         >
           <div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-              <span
-                style={{
-                  width: '10px',
-                  height: '10px',
-                  borderRadius: '50%',
-                  backgroundColor: '#84cc16',
-                  boxShadow: '0 0 12px #84cc16',
-                }}
-              />
-              <h1
-                style={{
-                  fontSize: '24px',
-                  fontWeight: 800,
-                  margin: 0,
-                  color: '#ffffff',
-                  letterSpacing: '-0.5px',
-                }}
-              >
-                Shared Shopping Hub <span style={{ color: '#84cc16' }}>NZ</span>
-              </h1>
-            </div>
-            <p
-              style={{
-                fontSize: '13px',
-                color: 'rgba(163, 230, 53, 0.8)',
-                margin: '6px 0 0 0',
-                fontWeight: 500,
-              }}
-            >
-              Live Share Link Active • Real-time Sync
+            <h1 style={{ fontSize: '24px', fontWeight: 800, margin: 0, color: '#ffffff' }}>
+              Shared Shopping Hub <span style={{ color: '#84cc16' }}>NZ</span>
+            </h1>
+            <p style={{ fontSize: '13px', color: 'rgba(163, 230, 53, 0.8)', margin: '6px 0 0 0' }}>
+              Live Barcode API Lookup • Real-time Sync
             </p>
           </div>
 
@@ -403,13 +391,9 @@ export default function App() {
               borderRadius: '14px',
               border: 'none',
               cursor: 'pointer',
-              boxShadow: '0 8px 20px rgba(132, 204, 22, 0.3)',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '8px',
             }}
           >
-            <span>📷 Barcode Scan</span>
+            📷 Barcode Scan
           </button>
         </div>
 
@@ -418,7 +402,6 @@ export default function App() {
           onSubmit={handleAddItem}
           style={{
             background: 'rgba(255, 255, 255, 0.03)',
-            backdropFilter: 'blur(16px)',
             border: '1px solid rgba(132, 204, 22, 0.2)',
             borderRadius: '20px',
             padding: '18px',
@@ -429,22 +412,12 @@ export default function App() {
           }}
         >
           <div style={{ flex: '1 1 200px' }}>
-            <label
-              style={{
-                display: 'block',
-                fontSize: '11px',
-                color: '#a1a1aa',
-                marginBottom: '6px',
-                textTransform: 'uppercase',
-                letterSpacing: '0.5px',
-                fontWeight: 600,
-              }}
-            >
-              Item Name
+            <label style={{ display: 'block', fontSize: '11px', color: '#a1a1aa', marginBottom: '6px', fontWeight: 600 }}>
+              ITEM NAME
             </label>
             <input
               type="text"
-              placeholder="e.g. Paint Shield Mitre 10 or Milk"
+              placeholder="e.g. Pam's Butter or Paint"
               value={itemName}
               onChange={(e) => setItemName(e.target.value)}
               style={{
@@ -455,24 +428,13 @@ export default function App() {
                 padding: '10px 14px',
                 color: '#fff',
                 fontSize: '14px',
-                outline: 'none',
               }}
             />
           </div>
 
           <div style={{ width: '135px' }}>
-            <label
-              style={{
-                display: 'block',
-                fontSize: '11px',
-                color: '#a1a1aa',
-                marginBottom: '6px',
-                textTransform: 'uppercase',
-                letterSpacing: '0.5px',
-                fontWeight: 600,
-              }}
-            >
-              Store
+            <label style={{ display: 'block', fontSize: '11px', color: '#a1a1aa', marginBottom: '6px', fontWeight: 600 }}>
+              STORE
             </label>
             <select
               value={itemStore}
@@ -484,8 +446,6 @@ export default function App() {
                 borderRadius: '12px',
                 padding: '10px 12px',
                 color: '#fff',
-                fontSize: '14px',
-                outline: 'none',
               }}
             >
               <option value="PAKnSAVE">PAK&apos;nSAVE</option>
@@ -498,18 +458,8 @@ export default function App() {
           </div>
 
           <div style={{ width: '65px' }}>
-            <label
-              style={{
-                display: 'block',
-                fontSize: '11px',
-                color: '#a1a1aa',
-                marginBottom: '6px',
-                textTransform: 'uppercase',
-                letterSpacing: '0.5px',
-                fontWeight: 600,
-              }}
-            >
-              Qty
+            <label style={{ display: 'block', fontSize: '11px', color: '#a1a1aa', marginBottom: '6px', fontWeight: 600 }}>
+              QTY
             </label>
             <input
               type="number"
@@ -523,26 +473,14 @@ export default function App() {
                 borderRadius: '12px',
                 padding: '10px 8px',
                 color: '#fff',
-                fontSize: '14px',
                 textAlign: 'center',
-                outline: 'none',
               }}
             />
           </div>
 
           <div style={{ width: '90px' }}>
-            <label
-              style={{
-                display: 'block',
-                fontSize: '11px',
-                color: '#a1a1aa',
-                marginBottom: '6px',
-                textTransform: 'uppercase',
-                letterSpacing: '0.5px',
-                fontWeight: 600,
-              }}
-            >
-              Price ($)
+            <label style={{ display: 'block', fontSize: '11px', color: '#a1a1aa', marginBottom: '6px', fontWeight: 600 }}>
+              PRICE ($)
             </label>
             <input
               type="number"
@@ -557,9 +495,7 @@ export default function App() {
                 borderRadius: '12px',
                 padding: '10px 10px',
                 color: '#a3e635',
-                fontSize: '14px',
                 textAlign: 'right',
-                outline: 'none',
                 fontWeight: 600,
               }}
             />
@@ -572,7 +508,6 @@ export default function App() {
               border: '1px solid #84cc16',
               color: '#a3e635',
               fontWeight: 700,
-              fontSize: '14px',
               padding: '10px 18px',
               borderRadius: '12px',
               cursor: 'pointer',
@@ -583,11 +518,10 @@ export default function App() {
           </button>
         </form>
 
-        {/* Circular Store Filters & Total */}
+        {/* Store Filters */}
         <div
           style={{
             background: 'rgba(255, 255, 255, 0.02)',
-            backdropFilter: 'blur(12px)',
             border: '1px solid rgba(255, 255, 255, 0.08)',
             borderRadius: '20px',
             padding: '16px',
@@ -598,11 +532,10 @@ export default function App() {
             gap: '16px',
           }}
         >
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', alignItems: 'center' }}>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
             {storeKeys.map((store) => {
               const brand = STORE_BRANDS[store] || STORE_BRANDS['Other'];
               const isActive = activeStore === store;
-
               return (
                 <button
                   key={store}
@@ -610,8 +543,8 @@ export default function App() {
                   style={{
                     display: 'inline-flex',
                     alignItems: 'center',
-                    gap: '8px',
-                    padding: '6px 14px 6px 6px',
+                    gap: '6px',
+                    padding: '6px 14px',
                     borderRadius: '9999px',
                     backgroundColor: brand.bg,
                     color: brand.text,
@@ -620,24 +553,9 @@ export default function App() {
                     fontWeight: 800,
                     cursor: 'pointer',
                     opacity: isActive ? 1 : 0.65,
-                    boxShadow: isActive
-                      ? '0 0 0 3px #050a06, 0 0 0 5px #a3e635, 0 8px 16px rgba(0,0,0,0.4)'
-                      : '0 2px 6px rgba(0,0,0,0.3)',
                   }}
                 >
-                  <span
-                    style={{
-                      width: '28px',
-                      height: '28px',
-                      borderRadius: '50%',
-                      background: 'rgba(0, 0, 0, 0.15)',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                    }}
-                  >
-                    {brand.icon}
-                  </span>
+                  <span>{brand.icon}</span>
                   <span>{store}</span>
                 </button>
               );
@@ -650,35 +568,24 @@ export default function App() {
               border: '1px solid rgba(132, 204, 22, 0.25)',
               padding: '8px 16px',
               borderRadius: '12px',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '8px',
             }}
           >
-            <span style={{ fontSize: '12px', color: '#a1a1aa', fontWeight: 500 }}>
-              Estimated Total:
-            </span>
+            <span style={{ fontSize: '12px', color: '#a1a1aa' }}>Estimated Total: </span>
             <span style={{ fontSize: '16px', fontWeight: 800, color: '#a3e635' }}>
               ${runningTotal.toFixed(2)} NZD
             </span>
           </div>
         </div>
 
-        {/* Grocery Items List with Delete Button */}
+        {/* Item List */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
           {filteredItems.map((item) => (
             <div
               key={item.id}
               onClick={() => toggleComplete(item.id)}
               style={{
-                background: item.isCompleted
-                  ? 'rgba(255, 255, 255, 0.01)'
-                  : 'rgba(255, 255, 255, 0.05)',
-                backdropFilter: 'blur(16px)',
-                border: item.isCompleted
-                  ? '1px solid rgba(255, 255, 255, 0.05)'
-                  : '1px solid rgba(132, 204, 22, 0.25)',
-                boxShadow: item.isCompleted ? 'none' : '0 8px 24px rgba(0, 0, 0, 0.25)',
+                background: item.isCompleted ? 'rgba(255, 255, 255, 0.01)' : 'rgba(255, 255, 255, 0.05)',
+                border: item.isCompleted ? '1px solid rgba(255, 255, 255, 0.05)' : '1px solid rgba(132, 204, 22, 0.25)',
                 borderRadius: '16px',
                 padding: '16px 20px',
                 display: 'flex',
@@ -693,68 +600,32 @@ export default function App() {
                   type="checkbox"
                   checked={item.isCompleted}
                   onChange={() => {}}
-                  style={{
-                    width: '20px',
-                    height: '20px',
-                    accentColor: '#84cc16',
-                    cursor: 'pointer',
-                  }}
+                  style={{ width: '20px', height: '20px', accentColor: '#84cc16' }}
                 />
                 <div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                    <span
-                      style={{
-                        fontSize: '15px',
-                        fontWeight: 600,
-                        color: item.isCompleted ? '#71717a' : '#ffffff',
-                        textDecoration: item.isCompleted ? 'line-through' : 'none',
-                      }}
-                    >
-                      {item.name}
-                    </span>
-                    {item.quantity > 1 && (
-                      <span
-                        style={{
-                          fontSize: '11px',
-                          padding: '2px 8px',
-                          borderRadius: '6px',
-                          background: 'rgba(132, 204, 22, 0.15)',
-                          color: '#a3e635',
-                          border: '1px solid rgba(132, 204, 22, 0.3)',
-                          fontWeight: 700,
-                        }}
-                      >
-                        x{item.quantity}
-                      </span>
-                    )}
-                  </div>
+                  <span
+                    style={{
+                      fontSize: '15px',
+                      fontWeight: 600,
+                      color: item.isCompleted ? '#71717a' : '#ffffff',
+                      textDecoration: item.isCompleted ? 'line-through' : 'none',
+                    }}
+                  >
+                    {item.name}
+                  </span>
                   {item.description && (
-                    <p style={{ fontSize: '12px', color: '#a1a1aa', margin: '4px 0 0 0' }}>
-                      {item.description}
-                    </p>
+                    <p style={{ fontSize: '12px', color: '#a1a1aa', margin: '4px 0 0 0' }}>{item.description}</p>
                   )}
                 </div>
               </div>
 
               <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
                 <StoreBadge store={item.store} />
-
-                <span
-                  style={{
-                    fontSize: '16px',
-                    fontWeight: 800,
-                    color: '#a3e635',
-                    minWidth: '65px',
-                    textAlign: 'right',
-                  }}
-                >
+                <span style={{ fontSize: '16px', fontWeight: 800, color: '#a3e635', minWidth: '65px', textAlign: 'right' }}>
                   ${(item.price * item.quantity).toFixed(2)}
                 </span>
-
-                {/* DELETE ITEM BUTTON */}
                 <button
                   onClick={(e) => deleteItem(item.id, e)}
-                  title="Delete Item"
                   style={{
                     background: 'rgba(239, 68, 68, 0.15)',
                     border: '1px solid rgba(239, 68, 68, 0.4)',
@@ -762,12 +633,7 @@ export default function App() {
                     width: '32px',
                     height: '32px',
                     borderRadius: '8px',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
                     cursor: 'pointer',
-                    fontSize: '14px',
-                    fontWeight: 'bold',
                   }}
                 >
                   ✕
@@ -777,7 +643,7 @@ export default function App() {
           ))}
         </div>
 
-        {/* Modal Scanner with Real Camera Stream */}
+        {/* Barcode Scanner Modal */}
         {isScannerOpen && (
           <div
             style={{
@@ -800,53 +666,20 @@ export default function App() {
                 border: '1px solid rgba(132, 204, 22, 0.4)',
                 borderRadius: '24px',
                 padding: '24px',
-                boxShadow: '0 25px 50px rgba(0, 0, 0, 0.7)',
               }}
             >
-              <div
-                style={{
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                  alignItems: 'center',
-                  marginBottom: '16px',
-                }}
-              >
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <span
-                    style={{
-                      width: '10px',
-                      height: '10px',
-                      borderRadius: '50%',
-                      backgroundColor: '#84cc16',
-                    }}
-                  />
-                  <h3
-                    style={{
-                      fontSize: '18px',
-                      fontWeight: 700,
-                      color: '#a3e635',
-                      margin: 0,
-                    }}
-                  >
-                    PAK&apos;nSAVE NZ Scanner
-                  </h3>
-                </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+                <h3 style={{ fontSize: '18px', fontWeight: 700, color: '#a3e635', margin: 0 }}>
+                  {isLookingUp ? '🔍 Looking up Product...' : 'PAK\'nSAVE NZ Scanner'}
+                </h3>
                 <button
                   onClick={closeScanner}
-                  style={{
-                    background: 'rgba(255, 255, 255, 0.1)',
-                    border: 'none',
-                    color: '#fff',
-                    padding: '6px 10px',
-                    borderRadius: '8px',
-                    cursor: 'pointer',
-                  }}
+                  style={{ background: 'rgba(255, 255, 255, 0.1)', border: 'none', color: '#fff', padding: '6px 10px', borderRadius: '8px', cursor: 'pointer' }}
                 >
                   ✕
                 </button>
               </div>
 
-              {/* Real Video Viewport Frame */}
               <div
                 style={{
                   height: '220px',
@@ -855,56 +688,16 @@ export default function App() {
                   background: '#000',
                   position: 'relative',
                   overflow: 'hidden',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
                 }}
               >
-                <video
-                  ref={videoRef}
-                  autoPlay
-                  playsInline
-                  muted
-                  style={{
-                    width: '100%',
-                    height: '100%',
-                    objectFit: 'cover',
-                  }}
-                />
-                <div
-                  style={{
-                    position: 'absolute',
-                    bottom: '10px',
-                    background: 'rgba(0, 0, 0, 0.6)',
-                    padding: '4px 10px',
-                    borderRadius: '8px',
-                    fontSize: '11px',
-                    color: '#a3e635',
-                  }}
-                >
-                  Align EAN-13 / UPC barcode inside frame
-                </div>
+                <video ref={videoRef} autoPlay playsInline muted style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
               </div>
 
-              {cameraError && (
-                <p
-                  style={{
-                    fontSize: '12px',
-                    color: '#f87171',
-                    marginTop: '10px',
-                    textAlign: 'center',
-                  }}
-                >
-                  {cameraError}
-                </p>
-              )}
+              {cameraError && <p style={{ fontSize: '12px', color: '#f87171', marginTop: '10px' }}>{cameraError}</p>}
 
               <button
-                onClick={() =>
-                  handleBarcodeDetected(
-                    '9400' + Math.floor(10000000 + Math.random() * 90000000)
-                  )
-                }
+                onClick={() => handleBarcodeDetected('9400547001234')}
+                disabled={isLookingUp}
                 style={{
                   width: '100%',
                   marginTop: '16px',
@@ -916,9 +709,10 @@ export default function App() {
                   borderRadius: '14px',
                   border: 'none',
                   cursor: 'pointer',
+                  opacity: isLookingUp ? 0.6 : 1,
                 }}
               >
-                Simulate Scan (Fallback)
+                {isLookingUp ? 'Fetching Barcode API...' : 'Simulate Scan (Pam\'s Butter NZ)'}
               </button>
             </div>
           </div>
