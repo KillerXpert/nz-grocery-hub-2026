@@ -83,6 +83,9 @@ export default function App() {
   const [cameraError, setCameraError] = useState(null);
   const [lookupStatus, setLookupStatus] = useState('');
 
+  // Editing State
+  const [editingItem, setEditingItem] = useState(null);
+
   const videoRef = useRef(null);
   const streamRef = useRef(null);
   const isScanningRef = useRef(false);
@@ -103,6 +106,7 @@ export default function App() {
       isCompleted: false,
       description: "Chilled Dairy • PAK'nSAVE",
       barcode: '9400547001234',
+      imageUrl: 'https://images.openfoodfacts.org/images/products/940/054/700/1234/front_en.3.200.jpg',
     },
     {
       id: '2',
@@ -112,6 +116,7 @@ export default function App() {
       store: 'Mitre 10',
       isCompleted: false,
       description: 'Aisle 8 • DIY House Renovation',
+      imageUrl: '',
     },
   ]);
 
@@ -135,6 +140,21 @@ export default function App() {
     setItems((prev) => prev.filter((item) => item.id !== id));
   };
 
+  const openEditModal = (item, e) => {
+    e.stopPropagation();
+    setEditingItem({ ...item });
+  };
+
+  const saveEditItem = (e) => {
+    e.preventDefault();
+    if (!editingItem || !editingItem.name.trim()) return;
+
+    setItems((prev) =>
+      prev.map((item) => (item.id === editingItem.id ? editingItem : item))
+    );
+    setEditingItem(null);
+  };
+
   const handleAddItem = (e) => {
     e.preventDefault();
     if (!itemName.trim()) return;
@@ -147,6 +167,7 @@ export default function App() {
       store: itemStore,
       isCompleted: false,
       description: 'Manually added',
+      imageUrl: '',
     };
 
     setItems((prev) => [newItem, ...prev]);
@@ -155,12 +176,12 @@ export default function App() {
     setItemQty(1);
   };
 
-  // REAL LIVE BARCODE API LOOKUP ONLY (Zero Fakes)
+  // REAL LIVE BARCODE API LOOKUP (With Image Extraction)
   const handleBarcodeDetected = async (barcodeValue) => {
     setLookupStatus(`Searching barcode ${barcodeValue}...`);
 
     try {
-      // 1. Search Open Food Facts v0 API (Live NZ/AU & Global Database)
+      // 1. Open Food Facts v0 API
       const offResponse = await fetch(
         `https://world.openfoodfacts.org/api/v0/product/${barcodeValue}.json`
       );
@@ -170,14 +191,20 @@ export default function App() {
         const prod = offData.product;
         const brand = prod.brands ? prod.brands.split(',')[0].trim() : '';
         const title = prod.product_name || prod.product_name_en || 'Recognised Grocery Item';
+        
+        // Extract real image URL from Open Food Facts
+        const img =
+          prod.image_front_small_url ||
+          prod.image_front_url ||
+          prod.image_small_url ||
+          prod.image_url ||
+          '';
 
-        // Prevent repeating brand name if already in title
         const fullName =
           brand && !title.toLowerCase().includes(brand.toLowerCase())
             ? `${brand} - ${title}`
             : title;
 
-        // Automatically assign NZ supermarket based on brand signature
         let detectedStore = 'Woolworths';
         const brandUpper = brand.toUpperCase();
         if (brandUpper.includes('PAMS') || brandUpper.includes('VALUE')) {
@@ -198,11 +225,12 @@ export default function App() {
             prod.categories ? prod.categories.split(',')[0] : 'Grocery'
           }`,
           barcode: barcodeValue,
+          imageUrl: img,
         });
         return;
       }
 
-      // 2. Search UPCItemDB Fallback (General household, hardware, electronics)
+      // 2. UPCItemDB Fallback
       const upcResponse = await fetch(
         `https://api.upcitemdb.com/prod/trial/lookup?upc=${barcodeValue}`
       );
@@ -212,6 +240,7 @@ export default function App() {
         const found = upcData.items[0];
         const title = found.title || 'Recognised Product';
         const brand = found.brand ? `${found.brand} - ` : '';
+        const img = found.images && found.images.length > 0 ? found.images[0] : '';
 
         addItemToList({
           name: `${brand}${title}`,
@@ -219,17 +248,19 @@ export default function App() {
           store: 'Other',
           description: `Verified Barcode: ${barcodeValue}`,
           barcode: barcodeValue,
+          imageUrl: img,
         });
         return;
       }
 
-      // 3. Honest Unknown Barcode Handling
+      // 3. Fallback for unlisted barcodes
       addItemToList({
         name: `Scanned Barcode: ${barcodeValue}`,
         price: 0.00,
         store: 'Other',
-        description: `Unlisted in global database — tap to enter item name`,
+        description: `Unlisted in database — tap ✏️ to edit details`,
         barcode: barcodeValue,
+        imageUrl: '',
       });
     } catch (error) {
       addItemToList({
@@ -238,6 +269,7 @@ export default function App() {
         store: 'Other',
         description: `Offline Read • Barcode # ${barcodeValue}`,
         barcode: barcodeValue,
+        imageUrl: '',
       });
     } finally {
       closeScanner();
@@ -255,6 +287,7 @@ export default function App() {
         isCompleted: false,
         description: productData.description,
         barcode: productData.barcode,
+        imageUrl: productData.imageUrl || '',
       },
       ...prev,
     ]);
@@ -271,7 +304,6 @@ export default function App() {
     setLookupStatus('');
   };
 
-  // ROBUST CAMERA LIFECYCLE FOR MOBILE CHROME / ANDROID
   useEffect(() => {
     let scanInterval = null;
 
@@ -279,7 +311,6 @@ export default function App() {
       isScanningRef.current = false;
 
       const startCamera = async () => {
-        // Force-kill any hanging camera streams before starting
         if (streamRef.current) {
           streamRef.current.getTracks().forEach((track) => track.stop());
         }
@@ -291,14 +322,12 @@ export default function App() {
               video: { facingMode: 'environment' },
             });
           } catch (e) {
-            // Fallback if environment mode isn't explicitly supported by device
             stream = await navigator.mediaDevices.getUserMedia({ video: true });
           }
 
           streamRef.current = stream;
           if (videoRef.current) {
             videoRef.current.srcObject = stream;
-            // CRITICAL ON MOBILE WEB: Must explicitly call .play() to avoid black box
             await videoRef.current.play().catch(() => {});
           }
 
@@ -318,7 +347,7 @@ export default function App() {
                   if (barcodes && barcodes.length > 0) {
                     const code = barcodes[0].rawValue;
                     if (code && code.length >= 8) {
-                      isScanningRef.current = true; // Locks camera immediately to prevent double scans
+                      isScanningRef.current = true;
                       handleBarcodeDetected(code);
                     }
                   }
@@ -327,7 +356,7 @@ export default function App() {
             }, 300);
           }
         } catch (err) {
-          setCameraError('Camera permission denied or unavailable on this browser.');
+          setCameraError('Camera permission denied or unavailable.');
         }
       };
 
@@ -383,7 +412,7 @@ export default function App() {
               Shared Shopping Hub <span style={{ color: '#84cc16' }}>NZ</span>
             </h1>
             <p style={{ fontSize: '13px', color: 'rgba(163, 230, 53, 0.8)', margin: '6px 0 0 0' }}>
-              Live Open Barcode Database • Accurate Match Only
+              Live Barcode API • Image & Detail Editor
             </p>
           </div>
 
@@ -616,7 +645,7 @@ export default function App() {
           </div>
         </div>
 
-        {/* Item List */}
+        {/* Item List with Images & Edit Action */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
           {filteredItems.map((item) => (
             <div
@@ -630,7 +659,7 @@ export default function App() {
                   ? '1px solid rgba(255, 255, 255, 0.05)'
                   : '1px solid rgba(132, 204, 22, 0.25)',
                 borderRadius: '16px',
-                padding: '16px 20px',
+                padding: '14px 18px',
                 display: 'flex',
                 justifyContent: 'space-between',
                 alignItems: 'center',
@@ -638,47 +667,117 @@ export default function App() {
                 opacity: item.isCompleted ? 0.45 : 1,
               }}
             >
-              <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
                 <input
                   type="checkbox"
                   checked={item.isCompleted}
                   onChange={() => {}}
                   style={{ width: '20px', height: '20px', accentColor: '#84cc16' }}
                 />
-                <div>
-                  <span
+
+                {/* Product Image Thumbnail */}
+                {item.imageUrl ? (
+                  <img
+                    src={item.imageUrl}
+                    alt={item.name}
                     style={{
-                      fontSize: '15px',
-                      fontWeight: 600,
-                      color: item.isCompleted ? '#71717a' : '#ffffff',
-                      textDecoration: item.isCompleted ? 'line-through' : 'none',
+                      width: '44px',
+                      height: '44px',
+                      objectFit: 'contain',
+                      borderRadius: '8px',
+                      background: '#ffffff',
+                      padding: '2px',
+                    }}
+                  />
+                ) : (
+                  <div
+                    style={{
+                      width: '44px',
+                      height: '44px',
+                      borderRadius: '8px',
+                      background: 'rgba(255,255,255,0.05)',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      fontSize: '18px',
                     }}
                   >
-                    {item.name}
-                  </span>
+                    📦
+                  </div>
+                )}
+
+                <div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <span
+                      style={{
+                        fontSize: '15px',
+                        fontWeight: 600,
+                        color: item.isCompleted ? '#71717a' : '#ffffff',
+                        textDecoration: item.isCompleted ? 'line-through' : 'none',
+                      }}
+                    >
+                      {item.name}
+                    </span>
+                    {item.quantity > 1 && (
+                      <span
+                        style={{
+                          fontSize: '11px',
+                          padding: '2px 8px',
+                          borderRadius: '6px',
+                          background: 'rgba(132, 204, 22, 0.15)',
+                          color: '#a3e635',
+                          fontWeight: 700,
+                        }}
+                      >
+                        x{item.quantity}
+                      </span>
+                    )}
+                  </div>
                   {item.description && (
-                    <p style={{ fontSize: '12px', color: '#a1a1aa', margin: '4px 0 0 0' }}>
+                    <p style={{ fontSize: '12px', color: '#a1a1aa', margin: '3px 0 0 0' }}>
                       {item.description}
                     </p>
                   )}
                 </div>
               </div>
 
-              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                 <StoreBadge store={item.store} />
+
                 <span
                   style={{
-                    fontSize: '16px',
+                    fontSize: '15px',
                     fontWeight: 800,
                     color: '#a3e635',
-                    minWidth: '65px',
+                    minWidth: '60px',
                     textAlign: 'right',
                   }}
                 >
                   ${(item.price * item.quantity).toFixed(2)}
                 </span>
+
+                {/* EDIT ITEM BUTTON */}
+                <button
+                  onClick={(e) => openEditModal(item, e)}
+                  title="Edit Item Details"
+                  style={{
+                    background: 'rgba(255, 255, 255, 0.1)',
+                    border: '1px solid rgba(255, 255, 255, 0.2)',
+                    color: '#fff',
+                    width: '32px',
+                    height: '32px',
+                    borderRadius: '8px',
+                    cursor: 'pointer',
+                    fontSize: '13px',
+                  }}
+                >
+                  ✏️
+                </button>
+
+                {/* DELETE ITEM BUTTON */}
                 <button
                   onClick={(e) => deleteItem(item.id, e)}
+                  title="Delete Item"
                   style={{
                     background: 'rgba(239, 68, 68, 0.15)',
                     border: '1px solid rgba(239, 68, 68, 0.4)',
@@ -687,6 +786,7 @@ export default function App() {
                     height: '32px',
                     borderRadius: '8px',
                     cursor: 'pointer',
+                    fontSize: '13px',
                   }}
                 >
                   ✕
@@ -695,6 +795,217 @@ export default function App() {
             </div>
           ))}
         </div>
+
+        {/* EDIT PRODUCT MODAL */}
+        {editingItem && (
+          <div
+            style={{
+              position: 'fixed',
+              inset: 0,
+              background: 'rgba(0, 0, 0, 0.85)',
+              backdropFilter: 'blur(10px)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              padding: '16px',
+              zIndex: 110,
+            }}
+          >
+            <form
+              onSubmit={saveEditItem}
+              style={{
+                width: '100%',
+                maxWidth: '420px',
+                background: '#09100c',
+                border: '1px solid rgba(132, 204, 22, 0.4)',
+                borderRadius: '24px',
+                padding: '24px',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '16px',
+              }}
+            >
+              <div
+                style={{
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                }}
+              >
+                <h3 style={{ fontSize: '18px', fontWeight: 700, color: '#a3e635', margin: 0 }}>
+                  ✏️ Edit Product Details
+                </h3>
+                <button
+                  type="button"
+                  onClick={() => setEditingItem(null)}
+                  style={{
+                    background: 'rgba(255, 255, 255, 0.1)',
+                    border: 'none',
+                    color: '#fff',
+                    padding: '6px 10px',
+                    borderRadius: '8px',
+                    cursor: 'pointer',
+                  }}
+                >
+                  ✕
+                </button>
+              </div>
+
+              {editingItem.imageUrl && (
+                <div style={{ textAlign: 'center' }}>
+                  <img
+                    src={editingItem.imageUrl}
+                    alt={editingItem.name}
+                    style={{
+                      maxHeight: '100px',
+                      objectFit: 'contain',
+                      borderRadius: '12px',
+                      background: '#fff',
+                      padding: '4px',
+                    }}
+                  />
+                </div>
+              )}
+
+              <div>
+                <label style={{ display: 'block', fontSize: '11px', color: '#a1a1aa', marginBottom: '4px' }}>
+                  PRODUCT NAME
+                </label>
+                <input
+                  type="text"
+                  value={editingItem.name}
+                  onChange={(e) => setEditingItem({ ...editingItem, name: e.target.value })}
+                  style={{
+                    width: '100%',
+                    background: 'rgba(0, 0, 0, 0.5)',
+                    border: '1px solid rgba(255, 255, 255, 0.2)',
+                    borderRadius: '10px',
+                    padding: '10px',
+                    color: '#fff',
+                    fontSize: '14px',
+                  }}
+                />
+              </div>
+
+              <div style={{ display: 'flex', gap: '12px' }}>
+                <div style={{ flex: 1 }}>
+                  <label style={{ display: 'block', fontSize: '11px', color: '#a1a1aa', marginBottom: '4px' }}>
+                    STORE
+                  </label>
+                  <select
+                    value={editingItem.store}
+                    onChange={(e) => setEditingItem({ ...editingItem, store: e.target.value })}
+                    style={{
+                      width: '100%',
+                      background: '#0f1712',
+                      border: '1px solid rgba(255, 255, 255, 0.2)',
+                      borderRadius: '10px',
+                      padding: '10px',
+                      color: '#fff',
+                    }}
+                  >
+                    <option value="PAKnSAVE">PAK&apos;nSAVE</option>
+                    <option value="New World">New World</option>
+                    <option value="Woolworths">Woolworths</option>
+                    <option value="Bunnings">Bunnings</option>
+                    <option value="Mitre 10">Mitre 10</option>
+                    <option value="Other">Other</option>
+                  </select>
+                </div>
+
+                <div style={{ width: '80px' }}>
+                  <label style={{ display: 'block', fontSize: '11px', color: '#a1a1aa', marginBottom: '4px' }}>
+                    QTY
+                  </label>
+                  <input
+                    type="number"
+                    min="1"
+                    value={editingItem.quantity}
+                    onChange={(e) =>
+                      setEditingItem({
+                        ...editingItem,
+                        quantity: parseInt(e.target.value, 10) || 1,
+                      })
+                    }
+                    style={{
+                      width: '100%',
+                      background: 'rgba(0, 0, 0, 0.5)',
+                      border: '1px solid rgba(255, 255, 255, 0.2)',
+                      borderRadius: '10px',
+                      padding: '10px',
+                      color: '#fff',
+                      textAlign: 'center',
+                    }}
+                  />
+                </div>
+
+                <div style={{ width: '100px' }}>
+                  <label style={{ display: 'block', fontSize: '11px', color: '#a1a1aa', marginBottom: '4px' }}>
+                    PRICE ($)
+                  </label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    value={editingItem.price}
+                    onChange={(e) =>
+                      setEditingItem({
+                        ...editingItem,
+                        price: parseFloat(e.target.value) || 0,
+                      })
+                    }
+                    style={{
+                      width: '100%',
+                      background: 'rgba(0, 0, 0, 0.5)',
+                      border: '1px solid rgba(255, 255, 255, 0.2)',
+                      borderRadius: '10px',
+                      padding: '10px',
+                      color: '#a3e635',
+                      fontWeight: 700,
+                      textAlign: 'right',
+                    }}
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label style={{ display: 'block', fontSize: '11px', color: '#a1a1aa', marginBottom: '4px' }}>
+                  DESCRIPTION / NOTES
+                </label>
+                <input
+                  type="text"
+                  value={editingItem.description || ''}
+                  onChange={(e) => setEditingItem({ ...editingItem, description: e.target.value })}
+                  style={{
+                    width: '100%',
+                    background: 'rgba(0, 0, 0, 0.5)',
+                    border: '1px solid rgba(255, 255, 255, 0.2)',
+                    borderRadius: '10px',
+                    padding: '10px',
+                    color: '#fff',
+                    fontSize: '13px',
+                  }}
+                />
+              </div>
+
+              <button
+                type="submit"
+                style={{
+                  background: '#84cc16',
+                  color: '#050a06',
+                  fontWeight: 800,
+                  fontSize: '15px',
+                  padding: '12px',
+                  borderRadius: '12px',
+                  border: 'none',
+                  cursor: 'pointer',
+                  marginTop: '8px',
+                }}
+              >
+                Save Changes
+              </button>
+            </form>
+          </div>
+        )}
 
         {/* Barcode Scanner Modal */}
         {isScannerOpen && (
