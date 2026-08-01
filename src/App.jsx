@@ -155,14 +155,14 @@ export default function App() {
     setItemQty(1);
   };
 
-  // REAL LIVE BARCODE API LOOKUP ONLY (Zero Fake Overrides)
+  // REAL LIVE BARCODE API LOOKUP ONLY (Zero Fakes)
   const handleBarcodeDetected = async (barcodeValue) => {
     setLookupStatus(`Searching barcode ${barcodeValue}...`);
 
     try {
-      // 1. Search Open Food Facts API (Live NZ/AU & Global Database)
+      // 1. Search Open Food Facts v0 API (Live NZ/AU & Global Database)
       const offResponse = await fetch(
-        `https://world.openfoodfacts.org/api/v2/product/${barcodeValue}.json`
+        `https://world.openfoodfacts.org/api/v0/product/${barcodeValue}.json`
       );
       const offData = await offResponse.json();
 
@@ -170,14 +170,14 @@ export default function App() {
         const prod = offData.product;
         const brand = prod.brands ? prod.brands.split(',')[0].trim() : '';
         const title = prod.product_name || prod.product_name_en || 'Recognised Grocery Item';
-        
-        // Prevent repeating brand name if it's already in the product title
+
+        // Prevent repeating brand name if already in title
         const fullName =
           brand && !title.toLowerCase().includes(brand.toLowerCase())
             ? `${brand} - ${title}`
             : title;
 
-        // Automatically assign store based on brand signature
+        // Automatically assign NZ supermarket based on brand signature
         let detectedStore = 'Woolworths';
         const brandUpper = brand.toUpperCase();
         if (brandUpper.includes('PAMS') || brandUpper.includes('VALUE')) {
@@ -192,7 +192,7 @@ export default function App() {
 
         addItemToList({
           name: fullName,
-          price: 0.00, // Leave at 0 so you can enter the shelf price
+          price: 0.00,
           store: detectedStore,
           description: `Verified Barcode: ${barcodeValue} • ${
             prod.categories ? prod.categories.split(',')[0] : 'Grocery'
@@ -202,7 +202,7 @@ export default function App() {
         return;
       }
 
-      // 2. Search UPCItemDB Fallback (General household, electronics, hardware)
+      // 2. Search UPCItemDB Fallback (General household, hardware, electronics)
       const upcResponse = await fetch(
         `https://api.upcitemdb.com/prod/trial/lookup?upc=${barcodeValue}`
       );
@@ -223,7 +223,7 @@ export default function App() {
         return;
       }
 
-      // 3. Honest Unknown Barcode Handling (Never invents a product name)
+      // 3. Honest Unknown Barcode Handling
       addItemToList({
         name: `Scanned Barcode: ${barcodeValue}`,
         price: 0.00,
@@ -271,19 +271,35 @@ export default function App() {
     setLookupStatus('');
   };
 
+  // ROBUST CAMERA LIFECYCLE FOR MOBILE CHROME / ANDROID
   useEffect(() => {
     let scanInterval = null;
 
     if (isScannerOpen) {
       isScanningRef.current = false;
+
       const startCamera = async () => {
+        // Force-kill any hanging camera streams before starting
+        if (streamRef.current) {
+          streamRef.current.getTracks().forEach((track) => track.stop());
+        }
+
         try {
-          const stream = await navigator.mediaDevices.getUserMedia({
-            video: { facingMode: 'environment' },
-          });
+          let stream;
+          try {
+            stream = await navigator.mediaDevices.getUserMedia({
+              video: { facingMode: 'environment' },
+            });
+          } catch (e) {
+            // Fallback if environment mode isn't explicitly supported by device
+            stream = await navigator.mediaDevices.getUserMedia({ video: true });
+          }
+
           streamRef.current = stream;
           if (videoRef.current) {
             videoRef.current.srcObject = stream;
+            // CRITICAL ON MOBILE WEB: Must explicitly call .play() to avoid black box
+            await videoRef.current.play().catch(() => {});
           }
 
           if ('BarcodeDetector' in window) {
@@ -294,7 +310,7 @@ export default function App() {
             scanInterval = setInterval(async () => {
               if (
                 videoRef.current &&
-                videoRef.current.readyState === 4 &&
+                videoRef.current.readyState >= 2 &&
                 !isScanningRef.current
               ) {
                 try {
@@ -302,16 +318,16 @@ export default function App() {
                   if (barcodes && barcodes.length > 0) {
                     const code = barcodes[0].rawValue;
                     if (code && code.length >= 8) {
-                      isScanningRef.current = true; // Locks camera immediately to prevent duplicates
+                      isScanningRef.current = true; // Locks camera immediately to prevent double scans
                       handleBarcodeDetected(code);
                     }
                   }
                 } catch (err) {}
               }
-            }, 400);
+            }, 300);
           }
         } catch (err) {
-          setCameraError('Camera access unavailable on this browser.');
+          setCameraError('Camera permission denied or unavailable on this browser.');
         }
       };
 
@@ -784,7 +800,7 @@ export default function App() {
                   cursor: 'pointer',
                 }}
               >
-                Test Real Coke Vanilla Lookup
+                Simulate Scan (Coke Vanilla 1.5L)
               </button>
             </div>
           </div>
