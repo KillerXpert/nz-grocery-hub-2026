@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 
-// Unified Brand Configuration for NZ Stores
+// Brand styling for NZ retail stores
 const STORE_BRANDS = {
   ALL: {
     name: 'ALL',
@@ -53,52 +53,6 @@ const STORE_BRANDS = {
   },
 };
 
-// Built-in NZ Retail Catalog for immediate exact matches & sample NZ barcodes
-const NZ_PRODUCT_CATALOG = {
-  '9400547001234': {
-    name: "Pam's Pure Butter 500g",
-    price: 6.49,
-    store: 'PAKnSAVE',
-    description: "Chilled Dairy • PAK'nSAVE",
-  },
-  '9400547009872': {
-    name: "Pam's Whole Milk 2L",
-    price: 4.89,
-    store: 'PAKnSAVE',
-    description: 'Chilled Dairy • Pams Brand',
-  },
-  '9300675045797': {
-    name: 'Woolworths Full Cream Milk 2L',
-    price: 4.75,
-    store: 'Woolworths',
-    description: 'Everyday Chilled Dairy',
-  },
-  '9400562002345': {
-    name: "Wattie's Baked Beans 420g",
-    price: 2.29,
-    store: 'Woolworths',
-    description: 'Canned Goods - Aisle 4',
-  },
-  '9414574001018': {
-    name: 'Sanitarium Marmite 250g',
-    price: 5.60,
-    store: 'New World',
-    description: 'Pantry Spread',
-  },
-  '0000000001001': {
-    name: 'Solagard Roof Paint 10L',
-    price: 189.00,
-    store: 'Bunnings',
-    description: 'Paint & Decorating',
-  },
-  '0000000001002': {
-    name: 'Paint Shield Mitre 10 & Tape',
-    price: 18.50,
-    store: 'Mitre 10',
-    description: 'DIY Hardware • Aisle 8',
-  },
-};
-
 function StoreBadge({ store }) {
   const brand = STORE_BRANDS[store] || STORE_BRANDS['Other'];
   return (
@@ -127,10 +81,12 @@ export default function App() {
   const [activeStore, setActiveStore] = useState('ALL');
   const [isScannerOpen, setIsScannerOpen] = useState(false);
   const [cameraError, setCameraError] = useState(null);
-  const [isLookingUp, setIsLookingUp] = useState(false);
+  const [lookupStatus, setLookupStatus] = useState('');
+  const [isProcessing, setIsProcessing] = useState(false);
 
   const videoRef = useRef(null);
   const streamRef = useRef(null);
+  const lastScannedRef = useRef('');
 
   // Form state
   const [itemName, setItemName] = useState('');
@@ -200,73 +156,88 @@ export default function App() {
     setItemQty(1);
   };
 
-  // REAL BARCODE LOOKUP FUNCTION
+  // REAL LIVE BARCODE API LOOKUP (No Fake Random Fallbacks)
   const handleBarcodeDetected = async (barcodeValue) => {
-    setIsLookingUp(true);
+    if (isProcessing || lastScannedRef.current === barcodeValue) return;
+    
+    setIsProcessing(true);
+    lastScannedRef.current = barcodeValue;
+    setLookupStatus(`Searching barcode ${barcodeValue}...`);
 
     try {
-      // 1. Check NZ Local Exact Match Catalog First
-      if (NZ_PRODUCT_CATALOG[barcodeValue]) {
-        const localMatch = NZ_PRODUCT_CATALOG[barcodeValue];
-        addItemToList({
-          name: localMatch.name,
-          price: localMatch.price,
-          store: localMatch.store,
-          description: localMatch.description,
-          barcode: barcodeValue,
-        });
-        return;
-      }
-
-      // 2. Fetch Live Global Barcode Database (Open Food Facts API)
-      const response = await fetch(
+      // 1. First search Open Food Facts API (Millions of international & NZ groceries)
+      const offResponse = await fetch(
         `https://world.openfoodfacts.org/api/v2/product/${barcodeValue}.json`
       );
-      const data = await response.json();
+      const offData = await offResponse.json();
 
-      if (data && data.status === 1 && data.product) {
-        const prod = data.product;
+      if (offData && offData.status === 1 && offData.product) {
+        const prod = offData.product;
         const brand = prod.brands ? prod.brands.split(',')[0].trim() : '';
-        const title = prod.product_name || prod.product_name_en || 'Scanned Product';
-        const fullName = brand ? `${brand} ${title}` : title;
+        const title = prod.product_name || prod.product_name_en || 'Recognised Grocery Item';
+        const fullName = brand ? `${brand} - ${title}` : title;
 
-        // Auto-guess NZ Supermarket based on brand name
+        // Automatically assign store based on brand signature
         let detectedStore = 'Woolworths';
         const brandUpper = brand.toUpperCase();
         if (brandUpper.includes('PAMS') || brandUpper.includes('VALUE')) {
           detectedStore = 'PAKnSAVE';
-        } else if (brandUpper.includes('WOOLWORTHS') || brandUpper.includes('HOMEBRAND')) {
+        } else if (brandUpper.includes('WOOLWORTHS') || brandUpper.includes('HOMEBRAND') || brandUpper.includes('COUNTDOWN')) {
           detectedStore = 'Woolworths';
         }
 
         addItemToList({
           name: fullName,
-          price: 5.50, // Default estimate if store price isn't exposed by OpenFoodFacts
+          price: 0.00, // Leave at 0 so user types exact NZ shelf price
           store: detectedStore,
-          description: `Scanned Barcode: ${barcodeValue} • ${prod.categories ? prod.categories.split(',')[0] : 'Grocery'}`,
+          description: `Verified Barcode: ${barcodeValue} • ${prod.categories ? prod.categories.split(',')[0] : 'Grocery'}`,
           barcode: barcodeValue,
         });
-      } else {
-        // 3. Fallback for unlisted barcodes
-        addItemToList({
-          name: `Scanned Item (${barcodeValue})`,
-          price: 0.00,
-          store: 'PAKnSAVE',
-          description: `Barcode: ${barcodeValue} • Enter price manually`,
-          barcode: barcodeValue,
-        });
+        return;
       }
-    } catch (error) {
-      // Handle offline/network fallback
+
+      // 2. Second search UPCItemDB (General household items, electronics, hardware)
+      const upcResponse = await fetch(
+        `https://api.upcitemdb.com/prod/trial/lookup?upc=${barcodeValue}`
+      );
+      const upcData = await upcResponse.json();
+
+      if (upcData && upcData.items && upcData.items.length > 0) {
+        const found = upcData.items[0];
+        const title = found.title || 'Recognised Product';
+        const brand = found.brand ? `${found.brand} - ` : '';
+
+        addItemToList({
+          name: `${brand}${title}`,
+          price: 0.00,
+          store: 'Other',
+          description: `Verified Barcode: ${barcodeValue}`,
+          barcode: barcodeValue,
+        });
+        return;
+      }
+
+      // 3. Honest Fallback: Never invent a random name!
       addItemToList({
-        name: `Scanned Product (${barcodeValue.slice(-4)})`,
+        name: `Scanned Barcode: ${barcodeValue}`,
         price: 0.00,
         store: 'Other',
-        description: `Barcode: ${barcodeValue}`,
+        description: `Unlisted in global database — tap to edit name & price`,
+        barcode: barcodeValue,
+      });
+
+    } catch (error) {
+      // Offline / Network fallback
+      addItemToList({
+        name: `Scanned Barcode: ${barcodeValue}`,
+        price: 0.00,
+        store: 'Other',
+        description: `Offline Read • Barcode # ${barcodeValue}`,
         barcode: barcodeValue,
       });
     } finally {
-      setIsLookingUp(false);
+      setLookupStatus('');
+      setIsProcessing(false);
       closeScanner();
     }
   };
@@ -294,7 +265,9 @@ export default function App() {
     }
     setIsScannerOpen(false);
     setCameraError(null);
-    setIsLookingUp(false);
+    setLookupStatus('');
+    setIsProcessing(false);
+    lastScannedRef.current = '';
   };
 
   useEffect(() => {
@@ -317,18 +290,22 @@ export default function App() {
             });
 
             scanInterval = setInterval(async () => {
-              if (videoRef.current && videoRef.current.readyState === 4 && !isLookingUp) {
+              if (videoRef.current && videoRef.current.readyState === 4 && !isProcessing) {
                 try {
                   const barcodes = await detector.detect(videoRef.current);
                   if (barcodes && barcodes.length > 0) {
-                    handleBarcodeDetected(barcodes[0].rawValue);
+                    const code = barcodes[0].rawValue;
+                    // Ignore codes shorter than 8 digits (camera noise filtering)
+                    if (code && code.length >= 8) {
+                      handleBarcodeDetected(code);
+                    }
                   }
                 } catch (err) {}
               }
-            }, 500);
+            }, 400);
           }
         } catch (err) {
-          setCameraError('Camera access unavailable. Use the Simulate button to test NZ catalog.');
+          setCameraError('Camera access unavailable on this browser.');
         }
       };
 
@@ -341,7 +318,7 @@ export default function App() {
         streamRef.current.getTracks().forEach((track) => track.stop());
       }
     };
-  }, [isScannerOpen, isLookingUp]);
+  }, [isScannerOpen, isProcessing]);
 
   return (
     <div
@@ -376,7 +353,7 @@ export default function App() {
               Shared Shopping Hub <span style={{ color: '#84cc16' }}>NZ</span>
             </h1>
             <p style={{ fontSize: '13px', color: 'rgba(163, 230, 53, 0.8)', margin: '6px 0 0 0' }}>
-              Live Barcode API Lookup • Real-time Sync
+              Live Open Barcode Database • Accurate Match Only
             </p>
           </div>
 
@@ -670,7 +647,7 @@ export default function App() {
             >
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
                 <h3 style={{ fontSize: '18px', fontWeight: 700, color: '#a3e635', margin: 0 }}>
-                  {isLookingUp ? '🔍 Looking up Product...' : 'PAK\'nSAVE NZ Scanner'}
+                  {isProcessing ? '🔍 Searching Barcode Database...' : 'PAK\'nSAVE NZ Scanner'}
                 </h3>
                 <button
                   onClick={closeScanner}
@@ -693,11 +670,12 @@ export default function App() {
                 <video ref={videoRef} autoPlay playsInline muted style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
               </div>
 
+              {lookupStatus && <p style={{ fontSize: '13px', color: '#a3e635', marginTop: '10px', textAlign: 'center', fontWeight: 600 }}>{lookupStatus}</p>}
               {cameraError && <p style={{ fontSize: '12px', color: '#f87171', marginTop: '10px' }}>{cameraError}</p>}
 
               <button
                 onClick={() => handleBarcodeDetected('9400547001234')}
-                disabled={isLookingUp}
+                disabled={isProcessing}
                 style={{
                   width: '100%',
                   marginTop: '16px',
@@ -709,10 +687,10 @@ export default function App() {
                   borderRadius: '14px',
                   border: 'none',
                   cursor: 'pointer',
-                  opacity: isLookingUp ? 0.6 : 1,
+                  opacity: isProcessing ? 0.6 : 1,
                 }}
               >
-                {isLookingUp ? 'Fetching Barcode API...' : 'Simulate Scan (Pam\'s Butter NZ)'}
+                {isProcessing ? 'Searching Database...' : 'Test Lookup (Pam\'s Butter NZ Barcode)'}
               </button>
             </div>
           </div>
