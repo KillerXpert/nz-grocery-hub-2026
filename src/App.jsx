@@ -82,11 +82,10 @@ export default function App() {
   const [isScannerOpen, setIsScannerOpen] = useState(false);
   const [cameraError, setCameraError] = useState(null);
   const [lookupStatus, setLookupStatus] = useState('');
-  const [isProcessing, setIsProcessing] = useState(false);
 
   const videoRef = useRef(null);
   const streamRef = useRef(null);
-  const lastScannedRef = useRef('');
+  const isScanningRef = useRef(false);
 
   // Form state
   const [itemName, setItemName] = useState('');
@@ -156,16 +155,12 @@ export default function App() {
     setItemQty(1);
   };
 
-  // REAL LIVE BARCODE API LOOKUP (No Fake Random Fallbacks)
+  // REAL LIVE BARCODE API LOOKUP ONLY (Zero Fake Overrides)
   const handleBarcodeDetected = async (barcodeValue) => {
-    if (isProcessing || lastScannedRef.current === barcodeValue) return;
-    
-    setIsProcessing(true);
-    lastScannedRef.current = barcodeValue;
     setLookupStatus(`Searching barcode ${barcodeValue}...`);
 
     try {
-      // 1. First search Open Food Facts API (Millions of international & NZ groceries)
+      // 1. Search Open Food Facts API (Live NZ/AU & Global Database)
       const offResponse = await fetch(
         `https://world.openfoodfacts.org/api/v2/product/${barcodeValue}.json`
       );
@@ -175,28 +170,39 @@ export default function App() {
         const prod = offData.product;
         const brand = prod.brands ? prod.brands.split(',')[0].trim() : '';
         const title = prod.product_name || prod.product_name_en || 'Recognised Grocery Item';
-        const fullName = brand ? `${brand} - ${title}` : title;
+        
+        // Prevent repeating brand name if it's already in the product title
+        const fullName =
+          brand && !title.toLowerCase().includes(brand.toLowerCase())
+            ? `${brand} - ${title}`
+            : title;
 
         // Automatically assign store based on brand signature
         let detectedStore = 'Woolworths';
         const brandUpper = brand.toUpperCase();
         if (brandUpper.includes('PAMS') || brandUpper.includes('VALUE')) {
           detectedStore = 'PAKnSAVE';
-        } else if (brandUpper.includes('WOOLWORTHS') || brandUpper.includes('HOMEBRAND') || brandUpper.includes('COUNTDOWN')) {
+        } else if (
+          brandUpper.includes('WOOLWORTHS') ||
+          brandUpper.includes('HOMEBRAND') ||
+          brandUpper.includes('COUNTDOWN')
+        ) {
           detectedStore = 'Woolworths';
         }
 
         addItemToList({
           name: fullName,
-          price: 0.00, // Leave at 0 so user types exact NZ shelf price
+          price: 0.00, // Leave at 0 so you can enter the shelf price
           store: detectedStore,
-          description: `Verified Barcode: ${barcodeValue} • ${prod.categories ? prod.categories.split(',')[0] : 'Grocery'}`,
+          description: `Verified Barcode: ${barcodeValue} • ${
+            prod.categories ? prod.categories.split(',')[0] : 'Grocery'
+          }`,
           barcode: barcodeValue,
         });
         return;
       }
 
-      // 2. Second search UPCItemDB (General household items, electronics, hardware)
+      // 2. Search UPCItemDB Fallback (General household, electronics, hardware)
       const upcResponse = await fetch(
         `https://api.upcitemdb.com/prod/trial/lookup?upc=${barcodeValue}`
       );
@@ -217,17 +223,15 @@ export default function App() {
         return;
       }
 
-      // 3. Honest Fallback: Never invent a random name!
+      // 3. Honest Unknown Barcode Handling (Never invents a product name)
       addItemToList({
         name: `Scanned Barcode: ${barcodeValue}`,
         price: 0.00,
         store: 'Other',
-        description: `Unlisted in global database — tap to edit name & price`,
+        description: `Unlisted in global database — tap to enter item name`,
         barcode: barcodeValue,
       });
-
     } catch (error) {
-      // Offline / Network fallback
       addItemToList({
         name: `Scanned Barcode: ${barcodeValue}`,
         price: 0.00,
@@ -236,8 +240,6 @@ export default function App() {
         barcode: barcodeValue,
       });
     } finally {
-      setLookupStatus('');
-      setIsProcessing(false);
       closeScanner();
     }
   };
@@ -259,6 +261,7 @@ export default function App() {
   };
 
   const closeScanner = () => {
+    isScanningRef.current = false;
     if (streamRef.current) {
       streamRef.current.getTracks().forEach((track) => track.stop());
       streamRef.current = null;
@@ -266,14 +269,13 @@ export default function App() {
     setIsScannerOpen(false);
     setCameraError(null);
     setLookupStatus('');
-    setIsProcessing(false);
-    lastScannedRef.current = '';
   };
 
   useEffect(() => {
     let scanInterval = null;
 
     if (isScannerOpen) {
+      isScanningRef.current = false;
       const startCamera = async () => {
         try {
           const stream = await navigator.mediaDevices.getUserMedia({
@@ -290,13 +292,17 @@ export default function App() {
             });
 
             scanInterval = setInterval(async () => {
-              if (videoRef.current && videoRef.current.readyState === 4 && !isProcessing) {
+              if (
+                videoRef.current &&
+                videoRef.current.readyState === 4 &&
+                !isScanningRef.current
+              ) {
                 try {
                   const barcodes = await detector.detect(videoRef.current);
                   if (barcodes && barcodes.length > 0) {
                     const code = barcodes[0].rawValue;
-                    // Ignore codes shorter than 8 digits (camera noise filtering)
                     if (code && code.length >= 8) {
+                      isScanningRef.current = true; // Locks camera immediately to prevent duplicates
                       handleBarcodeDetected(code);
                     }
                   }
@@ -318,7 +324,7 @@ export default function App() {
         streamRef.current.getTracks().forEach((track) => track.stop());
       }
     };
-  }, [isScannerOpen, isProcessing]);
+  }, [isScannerOpen]);
 
   return (
     <div
@@ -332,7 +338,15 @@ export default function App() {
         padding: '24px 16px',
       }}
     >
-      <div style={{ maxWidth: '780px', margin: '0 auto', display: 'flex', flexDirection: 'column', gap: '20px' }}>
+      <div
+        style={{
+          maxWidth: '780px',
+          margin: '0 auto',
+          display: 'flex',
+          flexDirection: 'column',
+          gap: '20px',
+        }}
+      >
         {/* Header */}
         <div
           style={{
@@ -389,7 +403,15 @@ export default function App() {
           }}
         >
           <div style={{ flex: '1 1 200px' }}>
-            <label style={{ display: 'block', fontSize: '11px', color: '#a1a1aa', marginBottom: '6px', fontWeight: 600 }}>
+            <label
+              style={{
+                display: 'block',
+                fontSize: '11px',
+                color: '#a1a1aa',
+                marginBottom: '6px',
+                fontWeight: 600,
+              }}
+            >
               ITEM NAME
             </label>
             <input
@@ -410,7 +432,15 @@ export default function App() {
           </div>
 
           <div style={{ width: '135px' }}>
-            <label style={{ display: 'block', fontSize: '11px', color: '#a1a1aa', marginBottom: '6px', fontWeight: 600 }}>
+            <label
+              style={{
+                display: 'block',
+                fontSize: '11px',
+                color: '#a1a1aa',
+                marginBottom: '6px',
+                fontWeight: 600,
+              }}
+            >
               STORE
             </label>
             <select
@@ -435,7 +465,15 @@ export default function App() {
           </div>
 
           <div style={{ width: '65px' }}>
-            <label style={{ display: 'block', fontSize: '11px', color: '#a1a1aa', marginBottom: '6px', fontWeight: 600 }}>
+            <label
+              style={{
+                display: 'block',
+                fontSize: '11px',
+                color: '#a1a1aa',
+                marginBottom: '6px',
+                fontWeight: 600,
+              }}
+            >
               QTY
             </label>
             <input
@@ -456,7 +494,15 @@ export default function App() {
           </div>
 
           <div style={{ width: '90px' }}>
-            <label style={{ display: 'block', fontSize: '11px', color: '#a1a1aa', marginBottom: '6px', fontWeight: 600 }}>
+            <label
+              style={{
+                display: 'block',
+                fontSize: '11px',
+                color: '#a1a1aa',
+                marginBottom: '6px',
+                fontWeight: 600,
+              }}
+            >
               PRICE ($)
             </label>
             <input
@@ -561,8 +607,12 @@ export default function App() {
               key={item.id}
               onClick={() => toggleComplete(item.id)}
               style={{
-                background: item.isCompleted ? 'rgba(255, 255, 255, 0.01)' : 'rgba(255, 255, 255, 0.05)',
-                border: item.isCompleted ? '1px solid rgba(255, 255, 255, 0.05)' : '1px solid rgba(132, 204, 22, 0.25)',
+                background: item.isCompleted
+                  ? 'rgba(255, 255, 255, 0.01)'
+                  : 'rgba(255, 255, 255, 0.05)',
+                border: item.isCompleted
+                  ? '1px solid rgba(255, 255, 255, 0.05)'
+                  : '1px solid rgba(132, 204, 22, 0.25)',
                 borderRadius: '16px',
                 padding: '16px 20px',
                 display: 'flex',
@@ -591,14 +641,24 @@ export default function App() {
                     {item.name}
                   </span>
                   {item.description && (
-                    <p style={{ fontSize: '12px', color: '#a1a1aa', margin: '4px 0 0 0' }}>{item.description}</p>
+                    <p style={{ fontSize: '12px', color: '#a1a1aa', margin: '4px 0 0 0' }}>
+                      {item.description}
+                    </p>
                   )}
                 </div>
               </div>
 
               <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
                 <StoreBadge store={item.store} />
-                <span style={{ fontSize: '16px', fontWeight: 800, color: '#a3e635', minWidth: '65px', textAlign: 'right' }}>
+                <span
+                  style={{
+                    fontSize: '16px',
+                    fontWeight: 800,
+                    color: '#a3e635',
+                    minWidth: '65px',
+                    textAlign: 'right',
+                  }}
+                >
                   ${(item.price * item.quantity).toFixed(2)}
                 </span>
                 <button
@@ -645,13 +705,27 @@ export default function App() {
                 padding: '24px',
               }}
             >
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+              <div
+                style={{
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                  marginBottom: '16px',
+                }}
+              >
                 <h3 style={{ fontSize: '18px', fontWeight: 700, color: '#a3e635', margin: 0 }}>
-                  {isProcessing ? '🔍 Searching Barcode Database...' : 'PAK\'nSAVE NZ Scanner'}
+                  {lookupStatus ? '🔍 Searching Barcode Database...' : 'PAK\'nSAVE NZ Scanner'}
                 </h3>
                 <button
                   onClick={closeScanner}
-                  style={{ background: 'rgba(255, 255, 255, 0.1)', border: 'none', color: '#fff', padding: '6px 10px', borderRadius: '8px', cursor: 'pointer' }}
+                  style={{
+                    background: 'rgba(255, 255, 255, 0.1)',
+                    border: 'none',
+                    color: '#fff',
+                    padding: '6px 10px',
+                    borderRadius: '8px',
+                    cursor: 'pointer',
+                  }}
                 >
                   ✕
                 </button>
@@ -667,15 +741,36 @@ export default function App() {
                   overflow: 'hidden',
                 }}
               >
-                <video ref={videoRef} autoPlay playsInline muted style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                <video
+                  ref={videoRef}
+                  autoPlay
+                  playsInline
+                  muted
+                  style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                />
               </div>
 
-              {lookupStatus && <p style={{ fontSize: '13px', color: '#a3e635', marginTop: '10px', textAlign: 'center', fontWeight: 600 }}>{lookupStatus}</p>}
-              {cameraError && <p style={{ fontSize: '12px', color: '#f87171', marginTop: '10px' }}>{cameraError}</p>}
+              {lookupStatus && (
+                <p
+                  style={{
+                    fontSize: '13px',
+                    color: '#a3e635',
+                    marginTop: '10px',
+                    textAlign: 'center',
+                    fontWeight: 600,
+                  }}
+                >
+                  {lookupStatus}
+                </p>
+              )}
+              {cameraError && (
+                <p style={{ fontSize: '12px', color: '#f87171', marginTop: '10px' }}>
+                  {cameraError}
+                </p>
+              )}
 
               <button
-                onClick={() => handleBarcodeDetected('9400547001234')}
-                disabled={isProcessing}
+                onClick={() => handleBarcodeDetected('9300675045797')}
                 style={{
                   width: '100%',
                   marginTop: '16px',
@@ -687,10 +782,9 @@ export default function App() {
                   borderRadius: '14px',
                   border: 'none',
                   cursor: 'pointer',
-                  opacity: isProcessing ? 0.6 : 1,
                 }}
               >
-                {isProcessing ? 'Searching Database...' : 'Test Lookup (Pam\'s Butter NZ Barcode)'}
+                Test Real Coke Vanilla Lookup
               </button>
             </div>
           </div>
