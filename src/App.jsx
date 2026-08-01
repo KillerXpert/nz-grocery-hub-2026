@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 
 // Unified Brand Configuration mimicking real-world NZ logos
 const STORE_BRANDS = {
@@ -15,8 +15,8 @@ const STORE_BRANDS = {
   },
   PAKnSAVE: {
     name: 'PAKnSAVE',
-    bg: '#FACC15', // Authentic PAK'nSAVE Yellow
-    text: '#000000', // Solid Black Contrast
+    bg: '#FACC15',
+    text: '#000000',
     border: '#EAB308',
     icon: (
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
@@ -27,7 +27,7 @@ const STORE_BRANDS = {
   },
   'New World': {
     name: 'New World',
-    bg: '#DC2626', // Authentic New World Red
+    bg: '#DC2626',
     text: '#FFFFFF',
     border: '#B91C1C',
     icon: (
@@ -38,7 +38,7 @@ const STORE_BRANDS = {
   },
   Woolworths: {
     name: 'Woolworths',
-    bg: '#16A34A', // Authentic Woolworths Green
+    bg: '#16A34A',
     text: '#FFFFFF',
     border: '#15803D',
     icon: (
@@ -49,7 +49,7 @@ const STORE_BRANDS = {
   },
   Bunnings: {
     name: 'Bunnings',
-    bg: '#047857', // Authentic Bunnings Warehouse Green
+    bg: '#047857',
     text: '#FFFFFF',
     border: '#065F46',
     icon: (
@@ -60,8 +60,8 @@ const STORE_BRANDS = {
   },
   'Mitre 10': {
     name: 'Mitre 10',
-    bg: '#F97316', // Authentic Mitre 10 Orange
-    text: '#000000', // Black Contrast
+    bg: '#F97316',
+    text: '#000000',
     border: '#EA580C',
     icon: (
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
@@ -82,7 +82,6 @@ const STORE_BRANDS = {
   },
 };
 
-// Component for item card right-side circular logo badge
 function StoreBadge({ store }) {
   const brand = STORE_BRANDS[store] || STORE_BRANDS['Other'];
 
@@ -112,6 +111,10 @@ function StoreBadge({ store }) {
 export default function App() {
   const [activeStore, setActiveStore] = useState('ALL');
   const [isScannerOpen, setIsScannerOpen] = useState(false);
+  const [cameraError, setCameraError] = useState(null);
+
+  const videoRef = useRef(null);
+  const streamRef = useRef(null);
 
   // Form state for adding items
   const [itemName, setItemName] = useState('');
@@ -179,12 +182,19 @@ export default function App() {
     .filter((i) => !i.isCompleted)
     .reduce((sum, item) => sum + item.price * item.quantity, 0);
 
+  // Toggle Completed Checkbox
   const toggleComplete = (id) => {
     setItems((prev) =>
       prev.map((item) =>
         item.id === id ? { ...item, isCompleted: !item.isCompleted } : item
       )
     );
+  };
+
+  // Delete Item Function
+  const deleteItem = (id, e) => {
+    e.stopPropagation();
+    setItems((prev) => prev.filter((item) => item.id !== id));
   };
 
   const handleAddItem = (e) => {
@@ -207,29 +217,29 @@ export default function App() {
     setItemQty(1);
   };
 
-  const simulateBarcodeScan = () => {
+  // Handle successful scan from real camera or fallback
+  const handleBarcodeDetected = (barcodeValue) => {
     const randomBarcodes = [
       {
-        name: 'Sanitarium Marmite 250g',
+        name: `Scanned Item (${barcodeValue.slice(-4)})`,
         price: 5.89,
         store: 'PAKnSAVE',
-        description: 'Spreads • NZ Pantry',
+        description: `Barcode: ${barcodeValue}`,
       },
       {
-        name: 'Ozito Cordless Spray Gun',
-        price: 89.00,
-        store: 'Bunnings',
-        description: 'Power Tools • Hardware',
-      },
-      {
-        name: 'Stanley Tape Measure 8m',
+        name: `Hardware Tool (${barcodeValue.slice(-4)})`,
         price: 24.50,
         store: 'Mitre 10',
-        description: 'Tools & Hardware • NZ',
+        description: `Barcode: ${barcodeValue}`,
+      },
+      {
+        name: `Supermarket Item (${barcodeValue.slice(-4)})`,
+        price: 8.99,
+        store: 'Woolworths',
+        description: `Barcode: ${barcodeValue}`,
       },
     ];
-    const picked =
-      randomBarcodes[Math.floor(Math.random() * randomBarcodes.length)];
+    const picked = randomBarcodes[Math.floor(Math.random() * randomBarcodes.length)];
 
     setItems((prev) => [
       {
@@ -240,12 +250,71 @@ export default function App() {
         store: picked.store,
         isCompleted: false,
         description: picked.description,
-        barcode: '9400' + Math.floor(10000000 + Math.random() * 90000000),
+        barcode: barcodeValue,
       },
       ...prev,
     ]);
-    setIsScannerOpen(false);
+    closeScanner();
   };
+
+  const closeScanner = () => {
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach((track) => track.stop());
+      streamRef.current = null;
+    }
+    setIsScannerOpen(false);
+    setCameraError(null);
+  };
+
+  // Real Camera & BarcodeDetector Effect
+  useEffect(() => {
+    let scanInterval = null;
+
+    if (isScannerOpen) {
+      const startCamera = async () => {
+        try {
+          const stream = await navigator.mediaDevices.getUserMedia({
+            video: { facingMode: 'environment' }, // Prefer phone rear camera
+          });
+          streamRef.current = stream;
+          if (videoRef.current) {
+            videoRef.current.srcObject = stream;
+          }
+
+          // Check if native BarcodeDetector API is supported on phone browser
+          if ('BarcodeDetector' in window) {
+            const detector = new window.BarcodeDetector({
+              formats: ['ean_13', 'upc_a', 'qr_code', 'code_128', 'ean_8'],
+            });
+
+            scanInterval = setInterval(async () => {
+              if (videoRef.current && videoRef.current.readyState === 4) {
+                try {
+                  const barcodes = await detector.detect(videoRef.current);
+                  if (barcodes && barcodes.length > 0) {
+                    handleBarcodeDetected(barcodes[0].rawValue);
+                  }
+                } catch (err) {
+                  // Ignore harmless single-frame detection errors
+                }
+              }
+            }, 300);
+          }
+        } catch (err) {
+          setCameraError('Camera access denied or unavailable. You can use the button below to test.');
+        }
+      };
+
+      startCamera();
+    }
+
+    return () => {
+      if (scanInterval) clearInterval(scanInterval);
+      if (streamRef.current) {
+        streamRef.current.getTracks().forEach((track) => track.stop());
+      }
+    };
+  }, [isScannerOpen]);
 
   return (
     <div
@@ -255,43 +324,12 @@ export default function App() {
         backgroundImage:
           'radial-gradient(at 15% 15%, rgba(132, 204, 22, 0.18) 0px, transparent 50%), radial-gradient(at 85% 85%, rgba(16, 185, 129, 0.15) 0px, transparent 50%)',
         color: '#f4f4f5',
-        fontFamily:
-          '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
+        fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
         padding: '24px 16px',
         position: 'relative',
         overflowX: 'hidden',
       }}
     >
-      {/* Ambient Glowing Orbs behind Frosted Glass */}
-      <div
-        style={{
-          position: 'fixed',
-          top: '-10%',
-          left: '20%',
-          width: '350px',
-          height: '350px',
-          background: '#84cc16',
-          filter: 'blur(130px)',
-          opacity: 0.22,
-          pointerEvents: 'none',
-          zIndex: 0,
-        }}
-      />
-      <div
-        style={{
-          position: 'fixed',
-          bottom: '5%',
-          right: '10%',
-          width: '300px',
-          height: '300px',
-          background: '#22c55e',
-          filter: 'blur(120px)',
-          opacity: 0.18,
-          pointerEvents: 'none',
-          zIndex: 0,
-        }}
-      />
-
       <div
         style={{
           maxWidth: '780px',
@@ -308,10 +346,8 @@ export default function App() {
           style={{
             background: 'rgba(20, 28, 22, 0.55)',
             backdropFilter: 'blur(20px)',
-            WebkitBackdropFilter: 'blur(20px)',
             border: '1px solid rgba(132, 204, 22, 0.3)',
-            boxShadow:
-              '0 20px 40px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.1)',
+            boxShadow: '0 20px 40px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.1)',
             borderRadius: '20px',
             padding: '24px',
             display: 'flex',
@@ -341,8 +377,7 @@ export default function App() {
                   letterSpacing: '-0.5px',
                 }}
               >
-                Shared Shopping Hub{' '}
-                <span style={{ color: '#84cc16' }}>NZ</span>
+                Shared Shopping Hub <span style={{ color: '#84cc16' }}>NZ</span>
               </h1>
             </div>
             <p
@@ -372,20 +407,18 @@ export default function App() {
               display: 'flex',
               alignItems: 'center',
               gap: '8px',
-              transition: 'all 0.2s ease',
             }}
           >
             <span>📷 Barcode Scan</span>
           </button>
         </div>
 
-        {/* Frosted Glass Add Item Form */}
+        {/* Add Item Form */}
         <form
           onSubmit={handleAddItem}
           style={{
             background: 'rgba(255, 255, 255, 0.03)',
             backdropFilter: 'blur(16px)',
-            WebkitBackdropFilter: 'blur(16px)',
             border: '1px solid rgba(132, 204, 22, 0.2)',
             borderRadius: '20px',
             padding: '18px',
@@ -544,14 +577,13 @@ export default function App() {
               borderRadius: '12px',
               cursor: 'pointer',
               height: '40px',
-              transition: 'all 0.2s',
             }}
           >
             + Add
           </button>
         </form>
 
-        {/* Samsung One UI Circular App Icon Store Filter & Total Tally */}
+        {/* Circular Store Filters & Total */}
         <div
           style={{
             background: 'rgba(255, 255, 255, 0.02)',
@@ -566,14 +598,7 @@ export default function App() {
             gap: '16px',
           }}
         >
-          <div
-            style={{
-              display: 'flex',
-              flexWrap: 'wrap',
-              gap: '8px',
-              alignItems: 'center',
-            }}
-          >
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', alignItems: 'center' }}>
             {storeKeys.map((store) => {
               const brand = STORE_BRANDS[store] || STORE_BRANDS['Other'];
               const isActive = activeStore === store;
@@ -587,19 +612,17 @@ export default function App() {
                     alignItems: 'center',
                     gap: '8px',
                     padding: '6px 14px 6px 6px',
-                    borderRadius: '9999px', // Full circle pill like Samsung icons
+                    borderRadius: '9999px',
                     backgroundColor: brand.bg,
                     color: brand.text,
                     border: `1px solid ${brand.border}`,
                     fontSize: '12px',
                     fontWeight: 800,
                     cursor: 'pointer',
-                    transition: 'all 0.2s ease',
                     opacity: isActive ? 1 : 0.65,
                     boxShadow: isActive
                       ? '0 0 0 3px #050a06, 0 0 0 5px #a3e635, 0 8px 16px rgba(0,0,0,0.4)'
                       : '0 2px 6px rgba(0,0,0,0.3)',
-                    transform: isActive ? 'scale(1.03)' : 'scale(1)',
                   }}
                 >
                   <span
@@ -632,28 +655,16 @@ export default function App() {
               gap: '8px',
             }}
           >
-            <span
-              style={{
-                fontSize: '12px',
-                color: '#a1a1aa',
-                fontWeight: 500,
-              }}
-            >
+            <span style={{ fontSize: '12px', color: '#a1a1aa', fontWeight: 500 }}>
               Estimated Total:
             </span>
-            <span
-              style={{
-                fontSize: '16px',
-                fontWeight: 800,
-                color: '#a3e635',
-              }}
-            >
+            <span style={{ fontSize: '16px', fontWeight: 800, color: '#a3e635' }}>
               ${runningTotal.toFixed(2)} NZD
             </span>
           </div>
         </div>
 
-        {/* Frosted Glass Grocery Items List */}
+        {/* Grocery Items List with Delete Button */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
           {filteredItems.map((item) => (
             <div
@@ -664,13 +675,10 @@ export default function App() {
                   ? 'rgba(255, 255, 255, 0.01)'
                   : 'rgba(255, 255, 255, 0.05)',
                 backdropFilter: 'blur(16px)',
-                WebkitBackdropFilter: 'blur(16px)',
                 border: item.isCompleted
                   ? '1px solid rgba(255, 255, 255, 0.05)'
                   : '1px solid rgba(132, 204, 22, 0.25)',
-                boxShadow: item.isCompleted
-                  ? 'none'
-                  : '0 8px 24px rgba(0, 0, 0, 0.25)',
+                boxShadow: item.isCompleted ? 'none' : '0 8px 24px rgba(0, 0, 0, 0.25)',
                 borderRadius: '16px',
                 padding: '16px 20px',
                 display: 'flex',
@@ -678,16 +686,9 @@ export default function App() {
                 alignItems: 'center',
                 cursor: 'pointer',
                 opacity: item.isCompleted ? 0.45 : 1,
-                transition: 'all 0.2s ease',
               }}
             >
-              <div
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '16px',
-                }}
-              >
+              <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
                 <input
                   type="checkbox"
                   checked={item.isCompleted}
@@ -700,21 +701,13 @@ export default function App() {
                   }}
                 />
                 <div>
-                  <div
-                    style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '8px',
-                    }}
-                  >
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                     <span
                       style={{
                         fontSize: '15px',
                         fontWeight: 600,
                         color: item.isCompleted ? '#71717a' : '#ffffff',
-                        textDecoration: item.isCompleted
-                          ? 'line-through'
-                          : 'none',
+                        textDecoration: item.isCompleted ? 'line-through' : 'none',
                       }}
                     >
                       {item.name}
@@ -736,27 +729,14 @@ export default function App() {
                     )}
                   </div>
                   {item.description && (
-                    <p
-                      style={{
-                        fontSize: '12px',
-                        color: '#a1a1aa',
-                        margin: '4px 0 0 0',
-                      }}
-                    >
+                    <p style={{ fontSize: '12px', color: '#a1a1aa', margin: '4px 0 0 0' }}>
                       {item.description}
                     </p>
                   )}
                 </div>
               </div>
 
-              <div
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '12px',
-                }}
-              >
-                {/* Samsung App Icon Style Store Badge */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
                 <StoreBadge store={item.store} />
 
                 <span
@@ -770,12 +750,34 @@ export default function App() {
                 >
                   ${(item.price * item.quantity).toFixed(2)}
                 </span>
+
+                {/* DELETE ITEM BUTTON */}
+                <button
+                  onClick={(e) => deleteItem(item.id, e)}
+                  title="Delete Item"
+                  style={{
+                    background: 'rgba(239, 68, 68, 0.15)',
+                    border: '1px solid rgba(239, 68, 68, 0.4)',
+                    color: '#f87171',
+                    width: '32px',
+                    height: '32px',
+                    borderRadius: '8px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    cursor: 'pointer',
+                    fontSize: '14px',
+                    fontWeight: 'bold',
+                  }}
+                >
+                  ✕
+                </button>
               </div>
             </div>
           ))}
         </div>
 
-        {/* Modal Scanner */}
+        {/* Modal Scanner with Real Camera Stream */}
         {isScannerOpen && (
           <div
             style={{
@@ -809,13 +811,7 @@ export default function App() {
                   marginBottom: '16px',
                 }}
               >
-                <div
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '8px',
-                  }}
-                >
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                   <span
                     style={{
                       width: '10px',
@@ -836,7 +832,7 @@ export default function App() {
                   </h3>
                 </div>
                 <button
-                  onClick={() => setIsScannerOpen(false)}
+                  onClick={closeScanner}
                   style={{
                     background: 'rgba(255, 255, 255, 0.1)',
                     border: 'none',
@@ -850,38 +846,65 @@ export default function App() {
                 </button>
               </div>
 
+              {/* Real Video Viewport Frame */}
               <div
                 style={{
-                  height: '180px',
+                  height: '220px',
                   borderRadius: '16px',
-                  border: '2px dashed rgba(132, 204, 22, 0.4)',
-                  background: 'rgba(0, 0, 0, 0.6)',
+                  border: '2px dashed rgba(132, 204, 22, 0.6)',
+                  background: '#000',
+                  position: 'relative',
+                  overflow: 'hidden',
                   display: 'flex',
-                  flexDirection: 'column',
                   alignItems: 'center',
                   justifyContent: 'center',
-                  padding: '16px',
-                  textAlign: 'center',
                 }}
               >
-                <p
+                <video
+                  ref={videoRef}
+                  autoPlay
+                  playsInline
+                  muted
                   style={{
-                    fontSize: '14px',
-                    color: '#e4e4e7',
-                    fontWeight: 600,
-                    margin: '0 0 6px 0',
+                    width: '100%',
+                    height: '100%',
+                    objectFit: 'cover',
+                  }}
+                />
+                <div
+                  style={{
+                    position: 'absolute',
+                    bottom: '10px',
+                    background: 'rgba(0, 0, 0, 0.6)',
+                    padding: '4px 10px',
+                    borderRadius: '8px',
+                    fontSize: '11px',
+                    color: '#a3e635',
                   }}
                 >
-                  [ Camera Viewport Ready ]
-                </p>
-                <p style={{ fontSize: '12px', color: '#71717a', margin: 0 }}>
-                  Align EAN-13 barcode inside frame to look up NZ grocery
-                  details &amp; price.
-                </p>
+                  Align EAN-13 / UPC barcode inside frame
+                </div>
               </div>
 
+              {cameraError && (
+                <p
+                  style={{
+                    fontSize: '12px',
+                    color: '#f87171',
+                    marginTop: '10px',
+                    textAlign: 'center',
+                  }}
+                >
+                  {cameraError}
+                </p>
+              )}
+
               <button
-                onClick={simulateBarcodeScan}
+                onClick={() =>
+                  handleBarcodeDetected(
+                    '9400' + Math.floor(10000000 + Math.random() * 90000000)
+                  )
+                }
                 style={{
                   width: '100%',
                   marginTop: '16px',
@@ -893,10 +916,9 @@ export default function App() {
                   borderRadius: '14px',
                   border: 'none',
                   cursor: 'pointer',
-                  boxShadow: '0 10px 25px rgba(132, 204, 22, 0.3)',
                 }}
               >
-                Simulate Successful Barcode Scan
+                Simulate Scan (Fallback)
               </button>
             </div>
           </div>
